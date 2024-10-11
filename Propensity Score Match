@@ -77,138 +77,59 @@ sd_after <- psmpracticedata %>%
                      College_ARTS, College_BUS, College_EDUC, College_TECH,
                      College_NHHS, College_UNIV), list(sd = ~ sd(.x))))
 
-#just age for computing hedge's g
-mean_after_nn <- psmpracticedata %>% 
-  group_by(treatment) %>% 
-  summarise(across(c(Age), list(mean = ~ mean(.x))))
+#cox'd to deternmine the standardized mean difference (how similar the control and treatment groups are for each demographic)
+prevalencerate <-  dfpractice%>%
+  group_by(treatment) %>%
+  summarise(Sex = sum(Sex) / n(),
+            Black = sum(Ethnic_Black)/n(),
+            Hispanic = sum(Ethnic_Hispanic)/n(),
+            White = sum(Ethnic_White)/n(),
+            Other = sum(Ethnic_Other)/n(),
+            FR = sum(Class_FR)/n(),
+            SO = sum(Class_SO)/n(),
+            PELL = sum(PELL)/n(),
+            FirstGen = sum(FirstGen)/n(),
+            TFCSchol = sum(TFCSchol)/n(),
+            ARTS = sum(College_ARTS)/n(),
+            BUS = sum(College_BUS)/n(),
+            NHHS = sum(College_NHHS/n(),
+            EDUC = sum(College_EDUC)/n(),
+            TECH = sum(College_TECH)/n(),
+            UNIV = sum(College_UNIV)/n())
 
-sd_after_nn <- psmpracticedata %>% 
-  group_by(treatment) %>% 
-  summarise(across(c(Age), list(sd = ~ sd(.x))))
+untreatedprevalencerate <- prevalencerate[prevalencerate$treatment == 0, ]
+treatedprevalencerate <- prevalencerate[prevalencerate$treatment == 1, ]
 
-#Run the following linear and logistic regressions to determine the impact of the treatment on credit hours and odds of withdrawal
-#Include covariates with a large standardized mean difference
-#Exlude Class_FR because of collinearity with Class_SO
+#cox's d for all binary variables before propensity score matching
+dCox_before <- print((log(treatedprevalencerate/(1-treatedprevalencerate))-
+                        log(untreatedprevalencerate/(1-untreatedprevalencerate)))/1.65)
 
-#OLS on cumulative credit hours
-creditsS21 <- lm(SpringTotalEarnHrs~
-                   treatment+
-                   TotalEarnHrs+
-                   Sex+
-                   Ethnic_Black+
-                   Ethnic_Hispanic+
-                   Class_SO+
-                   College_ARTS+
-                   College_BUS+
-                   College_EDUC+
-                   College_NHHS+
-                   College_TECH,
-                 data = psmpracticedata,
-                 weights = weights)
+m_prevalencerate <-  psmpracticedata%>%
+  group_by(treatment) %>%
+  summarise(Sex = sum(Sex) / n(),
+            Black = sum(Ethnic_Black)/n(),
+            Hispanic = sum(Ethnic_Hispanic)/n(),
+            White = sum(Ethnic_White)/n(),
+            Other = sum(Ethnic_Other)/n(),
+            FR = sum(Class_FR)/n(),
+            SO = sum(Class_SO)/n(),
+            PELL = sum(PELL)/n(),
+            FirstGen = sum(FirstGen)/n(),
+            TFCSchol = sum(TFCSchol)/n(),
+            ARTS = sum(College_ARTS)/n(),
+            BUS = sum(College_BUS)/n(),
+            NHHS = sum(College_NHHS/n(),
+            EDUC = sum(College_EDUC)/n(),
+            TECH = sum(College_TECH)/n(),
+            UNIV = sum(College_UNIV)/n())
 
-summary(creditsS21)
+m_untreatedprevalencerate <- m_prevalencerate[m_prevalencerate$treatment == 0, ]
+m_treatedprevalencerate <- m_prevalencerate[m_prevalencerate$treatment == 1, ]
 
-#Fall 2021 treatment impact on Credit Hours
-creditsF21 <- lm(Fa2021TotalEarnHrs~
-                   treatment+
-                   TotalEarnHrs+
-                   Sex+
-                   Ethnic_Black+
-                   Ethnic_Hispanic+
-                   Class_SO+
-                   College_ARTS+
-                   College_BUS+
-                   College_EDUC+
-                   College_NHHS+
-                   College_TECH,
-                 data = psmpracticedata,
-                 weights = weights)
-
-summary(creditsF21)
+#cox's d for all binary variables after propensity score matching
+dCox_after <- print((log(m_treatedprevalencerate/(1-m_treatedprevalencerate))-
+                       log(m_untreatedprevalencerate/(1-m_untreatedprevalencerate)))/1.65)
 
 
-#Spring 2022 treatment impact on Credit Hours
 
-creditsS22 <- lm(Sp2022TotalEarnHrs~
-                   treatment+
-                   TotalEarnHrs+
-                   Sex+
-                   Ethnic_Black+
-                   Ethnic_Hispanic+
-                   Class_SO+
-                   College_ARTS+
-                   College_BUS+
-                   College_EDUC+
-                   College_NHHS+
-                   College_TECH,
-                 data = psmpracticedata)
 
-summary(creditsS22)
-
-#logistic regression for withdrawals
-
-#Spring 2021 withdraws
-
-WDSpring21 <- glm(Spring21withdrew.Dummy~
-                    treatment+
-                    Sex+
-                    Ethnic_Black+
-                    Ethnic_Hispanic+
-                    Class_FR+
-                    Class_SO+
-                    College_ARTS+
-                    College_BUS+
-                    College_EDUC+
-                    College_NHHS+
-                    College_TECH,
-                  data = psmpracticedata,
-                  family = "binomial")
-
-summary(WDSpring21)
-
-options(scipen=999) 
-exp(coef(WDSpring21))
-
-#Fall 2021 withdraws 
-
-WDFall21 <- glm(Fall21withdrew.Dummy~
-                  treatment+
-                  Sex+
-                  Ethnic_Black+
-                  Ethnic_Hispanic+
-                  Class_FR+
-                  Class_SO+
-                  College_ARTS+
-                  College_BUS+
-                  College_EDUC+
-                  College_NHHS+
-                  College_TECH,
-                data = psmpracticedata,
-                family = "binomial")
-
-summary(WDFall21)
-
-options(scipen=999) 
-exp(coef(WDFall21))
-
-#Spring 2022 Withdraws
-
-WDSpring22 <- glm(Spring22withdrew.Dummy~
-                    treatment+
-                    Sex+
-                    Ethnic_Black+
-                    Ethnic_Hispanic+
-                    Class_FR+
-                    Class_SO+
-                    College_ARTS+
-                    College_BUS+
-                    College_EDUC+
-                    College_NHHS+
-                    College_TECH,
-                  data = psmpracticedata,
-                  family = "binomial")
-
-summary(WDSpring22)
-
-options(scipen=999) 
-exp(coef(WDSpring22))
