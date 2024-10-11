@@ -1,0 +1,214 @@
+library(tidyverse)
+library(tableone)
+
+#Upload population data title dfpractice containing group with treatment
+
+#summary statistics for before matching 
+mean_before <- dfpractice %>% 
+  group_by(treatment) %>% 
+  summarise(across(c(Age, Sex, FirstGen, PELL, TFCSchol,
+                     Ethnic_Black, Ethnic_Other, Ethnic_White,
+                     Ethnic_Hispanic, Class_FR, Class_SO,
+                     College_ARTS, College_BUS, College_EDUC, College_TECH,
+                     College_NHHS, College_UNIV), list(mean = ~ mean(.x))))
+
+sd_before <- dfpractice %>% 
+  group_by(treatment) %>% 
+  summarise(across(c(Age, Sex, FirstGen, PELL, TFCSchol,
+                     Ethnic_Black, Ethnic_Other, Ethnic_White,
+                     Ethnic_Hispanic, Class_FR, Class_SO,
+                     College_ARTS, College_BUS, College_EDUC, College_TECH,
+                     College_NHHS, College_UNIV), list(sd = ~ sd(.x))))
+
+
+#Propensity score matching nearest neighbor
+library(MatchIt)
+
+psmpractice <- matchit(treatment ~
+                         Sex+
+                         Age+
+                         FirstGen+
+                         PELL+
+                         TFCSchol+
+                         Ethnic_Black+
+                         Ethnic_Other+
+                         Ethnic_White+
+                         Ethnic_Hispanic+
+                         Class_FR+
+                         Class_SO+
+                         College_ARTS+
+                         College_BUS+
+                         College_EDUC+
+                         College_NHHS+
+                         College_TECH+
+                         College_UNIV,
+                       data = dfpractice, 
+                       distance = "logit",
+                       method = "nearest",
+                       m.order = "largest",
+                       replace = FALSE)
+
+psmpractice
+
+love.plot(bal.tab(psmpractice),
+          stat=c("m"),
+          grid = TRUE,
+          star = "raw",
+          thresholds = c(m=.05))
+
+#creating new matched data frame
+psmpracticedata <- match.data(psmpractice)
+
+#summary statistics for matched data frame
+mean_after <- psmpracticedata %>% 
+  group_by(treatment) %>% 
+  summarise(across(c(Age, Sex, FirstGen, PELL, TFCSchol,
+                     Ethnic_Black, Ethnic_Other, Ethnic_White,
+                     Ethnic_Hispanic, Class_FR, Class_SO,
+                     College_ARTS, College_BUS, College_EDUC, College_TECH,
+                     College_NHHS, College_UNIV), list(mean = ~ mean(.x)))) 
+
+
+sd_after <- psmpracticedata %>% 
+  group_by(treatment) %>% 
+  summarise(across(c(Age, Sex, FirstGen, PELL, TFCSchol,
+                     Ethnic_Black, Ethnic_Other, Ethnic_White,
+                     Ethnic_Hispanic, Class_FR, Class_SO,
+                     College_ARTS, College_BUS, College_EDUC, College_TECH,
+                     College_NHHS, College_UNIV), list(sd = ~ sd(.x))))
+
+#just age for computing hedge's g
+mean_after_nn <- psmpracticedata %>% 
+  group_by(treatment) %>% 
+  summarise(across(c(Age), list(mean = ~ mean(.x))))
+
+sd_after_nn <- psmpracticedata %>% 
+  group_by(treatment) %>% 
+  summarise(across(c(Age), list(sd = ~ sd(.x))))
+
+#Run the following linear and logistic regressions to determine the impact of the treatment on credit hours and odds of withdrawal
+#Include covariates with a large standardized mean difference
+#Exlude Class_FR because of collinearity with Class_SO
+
+#OLS on cumulative credit hours
+creditsS21 <- lm(SpringTotalEarnHrs~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = psmpracticedata,
+                 weights = weights)
+
+summary(creditsS21)
+
+#Fall 2021 treatment impact on Credit Hours
+creditsF21 <- lm(Fa2021TotalEarnHrs~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = psmpracticedata,
+                 weights = weights)
+
+summary(creditsF21)
+
+
+#Spring 2022 treatment impact on Credit Hours
+
+creditsS22 <- lm(Sp2022TotalEarnHrs~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = psmpracticedata)
+
+summary(creditsS22)
+
+#logistic regression for withdrawals
+
+#Spring 2021 withdraws
+
+WDSpring21 <- glm(Spring21withdrew.Dummy~
+                    treatment+
+                    Sex+
+                    Ethnic_Black+
+                    Ethnic_Hispanic+
+                    Class_FR+
+                    Class_SO+
+                    College_ARTS+
+                    College_BUS+
+                    College_EDUC+
+                    College_NHHS+
+                    College_TECH,
+                  data = psmpracticedata,
+                  family = "binomial")
+
+summary(WDSpring21)
+
+options(scipen=999) 
+exp(coef(WDSpring21))
+
+#Fall 2021 withdraws 
+
+WDFall21 <- glm(Fall21withdrew.Dummy~
+                  treatment+
+                  Sex+
+                  Ethnic_Black+
+                  Ethnic_Hispanic+
+                  Class_FR+
+                  Class_SO+
+                  College_ARTS+
+                  College_BUS+
+                  College_EDUC+
+                  College_NHHS+
+                  College_TECH,
+                data = psmpracticedata,
+                family = "binomial")
+
+summary(WDFall21)
+
+options(scipen=999) 
+exp(coef(WDFall21))
+
+#Spring 2022 Withdraws
+
+WDSpring22 <- glm(Spring22withdrew.Dummy~
+                    treatment+
+                    Sex+
+                    Ethnic_Black+
+                    Ethnic_Hispanic+
+                    Class_FR+
+                    Class_SO+
+                    College_ARTS+
+                    College_BUS+
+                    College_EDUC+
+                    College_NHHS+
+                    College_TECH,
+                  data = psmpracticedata,
+                  family = "binomial")
+
+summary(WDSpring22)
+
+options(scipen=999) 
+exp(coef(WDSpring22))
