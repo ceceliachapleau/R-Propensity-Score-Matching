@@ -1,0 +1,629 @@
+library(dplyr)
+
+#Rename propensity score matched data
+r_data <- psmpracticedata
+r_data <- rename(r_data, f20_cumulative_gpa = CumulativeGPA)
+r_data <- rename(r_data, s21_cumulative_gpa = SpringCumulativeGPA)
+
+Import 2022/23 data 
+data_22 <- X2022data
+#first renaming the credit for 2022 data
+data_22 <- rename(data_22, f22_tot_credithr = FallTotalEarnHrs)
+data_22 <- rename(data_22, s23_tot_credithr = SpringTotalEarnHrs)
+data_22 <- rename(data_22, f22_cuml_gpa = FallCumulativeGPA)
+data_22 <- rename(data_22, sp23_cuml_gpa = SpringCumulativeGPA)
+
+Import 2023/24 data for 2020 cohort
+New_data <- Correct_Fall2023_Assessment_Mentoring
+New_data <- rename(New_data, f23_cumulative_gpa = CumulativeGPA)
+New_data <- rename(New_data, s24_cumulative_gpa = SpringCumulativeGPA)
+
+#merge 2022/23 data with the matched control and treatment groups from 2021/22
+#only include relevant variables from 2022/23 data
+#Pidm is the identifier
+firstmerge <- merge(data_22[, c("f22_tot_credithr",
+                                 "fall22_drop",
+                                 "Pidm",
+                                 "fall22_grad",
+                                 "s23_tot_credithr",
+                                 "sp23_drop",
+                                 "sp23_grad",
+                                "f22_cuml_gpa", "sp23_cuml_gpa")],
+                    r_data, 
+                    by = "Pidm", all.y = TRUE)
+
+#filling in the missing values for those who withdrew and are not in 2022/23 data
+firstmerge <- firstmerge %>%
+  mutate(fall22_drop = ifelse(is.na(fall22_drop) & Spring22withdrew.Dummy == 1, 1, fall22_drop)) %>% 
+  #There is one spring 2022 grad so changing that person to did not drop
+  mutate(fall22_drop = ifelse(is.na(fall22_drop) & GradTerm.y == 202201, 0, fall22_drop)) %>% 
+  #if they are not in the new data but they did not drop or graduate last semester then they must have dropped over summer
+  mutate(fall22_drop = ifelse(is.na(fall22_drop), 1, fall22_drop)) %>% 
+  #copying fall 2022 withdrawals for spring 2023
+  mutate(sp23_drop = ifelse(is.na(sp23_drop) & fall22_drop == 1, 1, sp23_drop)) %>% 
+  mutate(sp23_drop = ifelse(is.na(sp23_drop) & fall22_drop == 0, 0, sp23_drop))
+
+#filling in the missing values for those graduated and are not in 2022/23 data
+firstmerge <- firstmerge %>%
+  mutate(fall22_grad = ifelse(is.na(fall22_grad) & fall22_drop == 1, 0, fall22_grad)) %>% 
+  #there is one spring 2022 grad
+  mutate(fall22_grad = ifelse(is.na(fall22_grad) & GradTerm.y == 202201, 1, fall22_grad)) %>%
+  #copying fall 2022 data
+  mutate(sp23_grad = ifelse(is.na(sp23_grad) & fall22_grad == 0, 0, sp23_grad)) %>% 
+  mutate(sp23_grad = ifelse(is.na(sp23_grad) & fall22_grad == 1, 1, sp23_grad))
+
+#continuing the credit hours for those who withdrew or graduated and are not in 2022/23 data
+firstmerge$f22_tot_credithr[is.na(firstmerge$f22_tot_credithr)]<- firstmerge$Sp2022TotalEarnHrs[is.na(firstmerge$f22_tot_credithr)]
+firstmerge$s23_tot_credithr[is.na(firstmerge$s23_tot_credithr)]<- firstmerge$f22_tot_credithr[is.na(firstmerge$s23_tot_credithr)]
+
+#Merge 2021-23 data with 2023/24 data
+merge_r <- merge(New_data[, c("Fa2023TotalEarnHrs",
+                                                 "Fall2023withdrew.dummy",
+                                                 "Pidm",
+                                                 "Sp2024TotalEarnHrs",
+                                                 "Spring2024withdrew.dummy",
+                                                 "Fall2023Graduation.dummy",
+                                                 "Spring2024Graduation.dummy",
+                              "f23_cumulative_gpa",
+                              "s24_cumulative_gpa")],
+                                    firstmerge, 
+                                    by = "Pidm", all.y = TRUE)
+
+#filling in gpa for those who dropped or graduated and are not in the newer data
+merge_r$s21_cumulative_gpa[is.na(merge_r$s21_cumulative_gpa)]<- merge_r$f20_cumulative_gpa[is.na(merge_r$s21_cumulative_gpa)]
+merge_r$Fa2021CumulativeGPA[is.na(merge_r$Fa2021CumulativeGPA)]<- merge_r$s21_cumulative_gpa[is.na(merge_r$Fa2021CumulativeGPA)]
+
+merge_r$Sp2022CumulativeGPA[is.na(merge_r$Sp2022CumulativeGPA)]<- merge_r$Fa2021CumulativeGPA[is.na(merge_r$Sp2022CumulativeGPA)]
+merge_r$f22_cuml_gpa[is.na(merge_r$f22_cuml_gpa)]<- merge_r$Sp2022CumulativeGPA[is.na(merge_r$f22_cuml_gpa)]
+
+merge_r$sp23_cuml_gpa[is.na(merge_r$sp23_cuml_gpa)]<- merge_r$f22_cuml_gpa[is.na(merge_r$sp23_cuml_gpa)]
+merge_r$f23_cumulative_gpa[is.na(merge_r$f23_cumulative_gpa)]<- merge_r$sp23_cuml_gpa[is.na(merge_r$f23_cumulative_gpa)]
+
+merge_r$s24_cumulative_gpa[is.na(merge_r$s24_cumulative_gpa)]<- merge_r$f23_cumulative_gpa[is.na(merge_r$s24_cumulative_gpa)]
+
+#continuing credit hours for those who dropped or graduated
+merge_r$Fa2023TotalEarnHrs[is.na(merge_r$Fa2023TotalEarnHrs)]<- merge_r$s23_tot_credithr[is.na(merge_r$Fa2023TotalEarnHrs)]
+merge_r$Sp2024TotalEarnHrs[is.na(merge_r$Sp2024TotalEarnHrs)]<- merge_r$Fa2023TotalEarnHrs[is.na(merge_r$Sp2024TotalEarnHrs)]
+
+#filling in withdrawals for those who dropped in prior years  
+merge_r <- merge_r %>%
+  mutate(Fall2023withdrew.dummy = ifelse(is.na(Fall2023withdrew.dummy) & sp23_drop == 1, 1, Fall2023withdrew.dummy)) %>% 
+  mutate(Fall2023withdrew.dummy = ifelse(is.na(Fall2023withdrew.dummy) & sp23_grad != 1, 1, Fall2023withdrew.dummy)) %>% 
+  #they graduated in the spring so it is a 0
+  mutate(Fall2023withdrew.dummy = ifelse(is.na(Fall2023withdrew.dummy) & sp23_grad == 1, 0, Fall2023withdrew.dummy)) 
+
+merge_r <- merge_r %>%
+  mutate(Spring2024withdrew.dummy = ifelse(is.na(Spring2024withdrew.dummy) & Fall2023withdrew.dummy == 1, 1, Spring2024withdrew.dummy)) %>% 
+  #they do not appear in the new data and they didn't graduate so they must have dropped over summer
+  mutate(Spring2024withdrew.dummy = ifelse(is.na(Spring2024withdrew.dummy) & Fall2023withdrew.dummy == 0, 0, Spring2024withdrew.dummy)) 
+
+#filling in graduations for those who graduated in prior years 
+merge_r <- merge_r %>%
+  mutate(Fall2023Graduation.dummy = ifelse(is.na(Fall2023Graduation.dummy) & sp23_grad == 1, 1, Fall2023Graduation.dummy)) %>% 
+  mutate(Fall2023Graduation.dummy = ifelse(is.na(Fall2023Graduation.dummy) & sp23_drop == 1, 0, Fall2023Graduation.dummy)) %>% 
+  #if they didn't drop or graduate last semester and they do not show up in the new data, they must have dropped or took a semester off which means they did not graduate
+  mutate(Fall2023Graduation.dummy = ifelse(is.na(Fall2023Graduation.dummy), 0, Fall2023Graduation.dummy))
+
+merge_r <- merge_r %>%
+  mutate(Spring2024Graduation.dummy = ifelse(is.na(Spring2024Graduation.dummy) & sp23_grad == 1, 1, Spring2024Graduation.dummy)) %>% 
+  mutate(Spring2024Graduation.dummy = ifelse(is.na(Spring2024Graduation.dummy) & sp23_drop == 1, 0, Spring2024Graduation.dummy)) %>%
+  #if they didn't drop or graduate last semester and they do not show up in the new data, they must have dropped over summer which means they did not graduate
+  mutate(Spring2024Graduation.dummy = ifelse(is.na(Spring2024Graduation.dummy), 0, Spring2024Graduation.dummy))
+
+#check to see if the data matches the original propensity score matched data
+mean_r <- merge_r %>% 
+  group_by(treatment) %>% 
+  summarise(across(c(Age, Sex, FirstGen, PELL, TFCSchol,
+                     Ethnic_Black, Ethnic_Other, Ethnic_White,
+                     Ethnic_Hispanic, Class_FR, Class_SO,
+                     College_ARTS, College_BUS, College_EDUC, College_TECH,
+                     College_NHHS, College_UNIV), list(mean = ~ mean(.x))))
+
+
+sd_r <- merge_r %>% 
+  group_by(treatment) %>% 
+  summarise(across(c(Age, Sex, FirstGen, PELL, TFCSchol,
+                     Ethnic_Black, Ethnic_Other, Ethnic_White,
+                     Ethnic_Hispanic, Class_FR, Class_SO,
+                     College_ARTS, College_BUS, College_EDUC, College_TECH,
+                     College_NHHS, College_UNIV), list(sd = ~ sd(.x))))
+
+#summary statistics for graduations
+grad24sum_r <- merge_r %>% 
+  group_by(treatment) %>% 
+  summarise(Grad24 = sum(Spring2024Graduation.dummy))
+
+#replicate models for credit hours
+creditsS21 <- lm(SpringTotalEarnHrs~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = merge_r)
+
+summary(creditsS21)
+
+
+#Fall 2021 treatment impact on Credit Hours
+creditsF21 <- lm(Fa2021TotalEarnHrs~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = merge_r)
+
+summary(creditsF21)
+
+
+#Spring 2022 treatment impact on Credit Hours
+creditsS22 <- lm(Sp2022TotalEarnHrs~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = merge_r)
+
+summary(creditsS22)
+
+#Fall 2022 treatment impact on Credit Hours
+creditsF22 <- lm(f22_tot_credithr~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = merge_r)
+
+summary(creditsF22)
+
+#Spring 2023 treatment impact on Credit Hours
+creditsS23 <- lm(s23_tot_credithr~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = merge_r)
+
+summary(creditsS23)
+
+#new credit hour models
+#Fall 2023 treatment impact on Credit Hours
+creditsF23 <- lm(Fa2023TotalEarnHrs~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = merge_r)
+
+summary(creditsF23)
+
+#Spring 2024 treatment impact on Credit Hours
+creditsS24 <- lm(Sp2024TotalEarnHrs~
+                   treatment+
+                   TotalEarnHrs+
+                   Sex+
+                   Ethnic_Black+
+                   Ethnic_Hispanic+
+                   Class_SO+
+                   College_ARTS+
+                   College_BUS+
+                   College_EDUC+
+                   College_NHHS+
+                   College_TECH,
+                 data = merge_r)
+
+summary(creditsS24)
+
+#raw credit hours for everyone
+raw_credithrs <- merge_r %>%
+  group_by(treatment) %>%
+  summarise_at(vars(Sp2024TotalEarnHrs), list(name = mean))
+
+#raw credit hours only for those still in school
+subset_r <- subset(merge_r, Spring2024withdrew.dummy == 0 &
+                     Spring2024Graduation.dummy == 0)
+
+raw_credithrs <- subset_r %>%
+  group_by(treatment) %>%
+  summarise_at(vars(Sp2024TotalEarnHrs), list(name = mean))
+
+
+#logistic regression for withdrawals
+#Spring 2021 withdrawals
+WDSpring21 <- glm(Spring21withdrew.Dummy~
+                    treatment+
+                    Sex+
+                    Ethnic_Black+
+                    Ethnic_Hispanic+
+                    Class_SO+
+                    College_ARTS+
+                    College_BUS+
+                    College_EDUC+
+                    College_NHHS+
+                    College_TECH,
+                  data = merge_r,
+                  family = "binomial")
+
+summary(WDSpring21)
+
+options(scipen=999) 
+exp(coef(WDSpring21))
+
+#Fall 2021 withdrawals 
+WDFall21 <- glm(Fall21withdrew.Dummy~
+                  treatment+
+                  Sex+
+                  Ethnic_Black+
+                  Ethnic_Hispanic+
+                  Class_SO+
+                  College_ARTS+
+                  College_BUS+
+                  College_EDUC+
+                  College_NHHS+
+                  College_TECH,
+                data = merge_r,
+                family = "binomial")
+
+summary(WDFall21)
+
+options(scipen=999) 
+exp(coef(WDFall21))
+
+#Spring 2022 Withdrawals
+WDSpring22 <- glm(Spring22withdrew.Dummy~
+                    treatment+
+                    Sex+
+                    Ethnic_Black+
+                    Ethnic_Hispanic+
+                    Class_SO+
+                    College_ARTS+
+                    College_BUS+
+                    College_EDUC+
+                    College_NHHS+
+                    College_TECH,
+                  data = merge_r,
+                  family = "binomial")
+
+summary(WDSpring22)
+
+options(scipen=999) 
+exp(coef(WDSpring22))
+
+#Fall 2022 Withdrawals
+WDFall22 <- glm(fall22_drop~
+                  treatment+
+                  Sex+
+                  Ethnic_Black+
+                  Ethnic_Hispanic+
+                  Class_SO+
+                  College_ARTS+
+                  College_BUS+
+                  College_EDUC+
+                  College_NHHS+
+                  College_TECH,
+                data = merge_r,
+                family = "binomial")
+
+summary(WDFall22)
+
+options(scipen=999) 
+exp(coef(WDFall22))
+
+#Spring 2023 Withdrawals
+#treating it as a character value
+str(merge_r$sp23_drop)
+merge_r$sp23_drop <- as.numeric(merge_r$sp23_drop)
+#Slightly different because I change the one na to 0
+WDSpring23 <- glm(sp23_drop~
+                    treatment+
+                    Sex+
+                    Ethnic_Black+
+                    Ethnic_Hispanic+
+                    Class_SO+
+                    College_ARTS+
+                    College_BUS+
+                    College_EDUC+
+                    College_NHHS+
+                    College_TECH,
+                  data = merge_r,
+                  family = "binomial")
+
+summary(WDSpring23)
+
+options(scipen=999) 
+exp(coef(WDSpring23))
+
+#models with new data
+#Fall 2023 Withdrawals
+WDFall23 <- glm(Fall2023withdrew.dummy~
+                  treatment+
+                  Sex+
+                  Ethnic_Black+
+                  Ethnic_Hispanic+
+                  Class_SO+
+                  College_ARTS+
+                  College_BUS+
+                  College_EDUC+
+                  College_NHHS+
+                  College_TECH,
+                data = merge_r,
+                family = "binomial")
+
+summary(WDFall23)
+
+options(scipen=999) 
+exp(coef(WDFall23))
+
+#Spring 2024 Withdrawals
+WDSpring24 <- glm(Spring2024withdrew.dummy~
+                    treatment+
+                    Sex+
+                    Ethnic_Black+
+                    Ethnic_Hispanic+
+                    Class_SO+
+                    College_ARTS+
+                    College_BUS+
+                    College_EDUC+
+                    College_NHHS+
+                    College_TECH,
+                  data = merge_r,
+                  family = "binomial")
+
+summary(WDSpring24)
+
+options(scipen=999) 
+exp(coef(WDSpring24))
+
+#raw count for withdrawals to show who is left to graduate or withdrawal in both groups
+raw_withdrawals_r <- merge_r %>%
+  group_by(treatment) %>%
+  summarise_at(vars(Spring2024withdrew.dummy), list(name = sum))
+
+#graduation odds ratio models
+#models with new data
+GradFall22 <- glm(fall22_grad~
+                    treatment+
+                    Sex+
+                    Ethnic_Black+
+                    Ethnic_Hispanic+
+                    Class_SO+
+                    College_ARTS+
+                    College_BUS+
+                    College_EDUC+
+                    College_NHHS+
+                    College_TECH,
+                  data = merge_r,
+                  family = "binomial")
+
+summary(GradFall22)
+
+options(scipen=999) 
+exp(coef(GradFall22))
+
+#Spring 2024 graduation
+str(merge_r$sp23_grad)
+merge_r$sp23_grad <- as.numeric(merge_r$sp23_grad)
+GradSpring23 <- glm(sp23_grad~
+                      treatment+
+                      Sex+
+                      Ethnic_Black+
+                      Ethnic_Hispanic+
+                      Class_SO+
+                      College_ARTS+
+                      College_BUS+
+                      College_EDUC+
+                      College_NHHS+
+                      College_TECH,
+                    data = merge_r,
+                    family = "binomial")
+
+summary(GradSpring23)
+
+options(scipen=999) 
+exp(coef(GradSpring23))
+#Fall 2023 graduation
+GradFall23 <- glm(Fall2023Graduation.dummy~
+                    treatment+
+                    Sex+
+                    Ethnic_Black+
+                    Ethnic_Hispanic+
+                    Class_SO+
+                    College_ARTS+
+                    College_BUS+
+                    College_EDUC+
+                    College_NHHS+
+                    College_TECH,
+                  data = merge_r,
+                  family = "binomial")
+
+summary(GradFall23)
+
+options(scipen=999) 
+exp(coef(GradFall23))
+
+#Spring 2024 graduation
+GradSpring24 <- glm(Spring2024Graduation.dummy~
+                      treatment+
+                      Sex+
+                      Ethnic_Black+
+                      Ethnic_Hispanic+
+                      Class_SO+
+                      College_ARTS+
+                      College_BUS+
+                      College_EDUC+
+                      College_NHHS+
+                      College_TECH,
+                    data = merge_r,
+                    family = "binomial")
+
+summary(GradSpring24)
+
+options(scipen=999) 
+exp(coef(GradSpring24))
+
+raw_grad_r <- merge_r %>%
+  group_by(treatment) %>%
+  summarise_at(vars(fall22_grad, sp23_grad, Fall2023Graduation.dummy,
+                    Spring2024Graduation.dummy), list(name = sum)) 
+
+#Testing impact on GPA
+gpa_f20 <- lm(f20_cumulative_gpa~
+                treatment+
+                Sex+
+                Ethnic_Black+
+                Ethnic_Hispanic+
+                Class_SO+
+                College_ARTS+
+                College_BUS+
+                College_EDUC+
+                College_NHHS+
+                College_TECH,
+              data = merge_r)
+
+summary(gpa_f20)
+
+gpa_s21 <- lm(s21_cumulative_gpa~
+                treatment+
+                Sex+
+                Ethnic_Black+
+                Ethnic_Hispanic+
+                Class_SO+
+                College_ARTS+
+                College_BUS+
+                College_EDUC+
+                College_NHHS+
+                College_TECH,
+              data = merge_r)
+
+summary(gpa_s21)
+
+gpa_f21 <- lm(Fa2021CumulativeGPA~
+                treatment+
+                Sex+
+                Ethnic_Black+
+                Ethnic_Hispanic+
+                Class_SO+
+                College_ARTS+
+                College_BUS+
+                College_EDUC+
+                College_NHHS+
+                College_TECH,
+              data = merge_r)
+
+summary(gpa_f21)
+
+gpa_s22 <- lm(Sp2022CumulativeGPA~
+                treatment+
+                Sex+
+                Ethnic_Black+
+                Ethnic_Hispanic+
+                Class_SO+
+                College_ARTS+
+                College_BUS+
+                College_EDUC+
+                College_NHHS+
+                College_TECH,
+              data = merge_r)
+
+summary(gpa_s22)
+
+gpa_f22 <- lm(f22_cuml_gpa~
+                treatment+
+                Sex+
+                Ethnic_Black+
+                Ethnic_Hispanic+
+                Class_SO+
+                College_ARTS+
+                College_BUS+
+                College_EDUC+
+                College_NHHS+
+                College_TECH,
+              data = merge_r)
+
+summary(gpa_f22)
+
+gpa_s23 <- lm(sp23_cuml_gpa~
+                treatment+
+                Sex+
+                Ethnic_Black+
+                Ethnic_Hispanic+
+                Class_SO+
+                College_ARTS+
+                College_BUS+
+                College_EDUC+
+                College_NHHS+
+                College_TECH,
+              data = merge_r)
+
+summary(gpa_s23)
+
+gpa_f23 <- lm(f23_cumulative_gpa~
+                treatment+
+                Sex+
+                Ethnic_Black+
+                Ethnic_Hispanic+
+                Class_SO+
+                College_ARTS+
+                College_BUS+
+                College_EDUC+
+                College_NHHS+
+                College_TECH,
+              data = merge_r)
+
+summary(gpa_f23)
+
+gpa_s24 <- lm(s24_cumulative_gpa~
+                treatment+
+                Sex+
+                Ethnic_Black+
+                Ethnic_Hispanic+
+                Class_SO+
+                College_ARTS+
+                College_BUS+
+                College_EDUC+
+                College_NHHS+
+                College_TECH,
+              data = merge_r)
+
+summary(gpa_s24)
