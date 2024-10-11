@@ -1,4 +1,8 @@
-#replicate models for credit hours
+#Run the following linear and logistic regressions to determine the impact of the treatment on credit hours, odds of withdrawal, graduation, and gpa
+#Include covariates with a large standardized mean difference
+#Exlude Class_FR because of collinearity with Class_SO
+
+#OLS on cumulative credit hours
 creditsS21 <- lm(SpringTotalEarnHrs~
                    treatment+
                    TotalEarnHrs+
@@ -120,11 +124,6 @@ creditsS24 <- lm(Sp2024TotalEarnHrs~
 
 summary(creditsS24)
 
-#raw credit hours for everyone
-raw_credithrs <- merge_r %>%
-  group_by(treatment) %>%
-  summarise_at(vars(Sp2024TotalEarnHrs), list(name = mean))
-
 #raw credit hours only for those still in school
 subset_r <- subset(merge_r, Spring2024withdrew.dummy == 0 &
                      Spring2024Graduation.dummy == 0)
@@ -151,7 +150,6 @@ WDSpring21 <- glm(Spring21withdrew.Dummy~
                   family = "binomial")
 
 summary(WDSpring21)
-
 options(scipen=999) 
 exp(coef(WDSpring21))
 
@@ -171,7 +169,6 @@ WDFall21 <- glm(Fall21withdrew.Dummy~
                 family = "binomial")
 
 summary(WDFall21)
-
 options(scipen=999) 
 exp(coef(WDFall21))
 
@@ -191,7 +188,6 @@ WDSpring22 <- glm(Spring22withdrew.Dummy~
                   family = "binomial")
 
 summary(WDSpring22)
-
 options(scipen=999) 
 exp(coef(WDSpring22))
 
@@ -211,7 +207,6 @@ WDFall22 <- glm(fall22_drop~
                 family = "binomial")
 
 summary(WDFall22)
-
 options(scipen=999) 
 exp(coef(WDFall22))
 
@@ -235,7 +230,6 @@ WDSpring23 <- glm(sp23_drop~
                   family = "binomial")
 
 summary(WDSpring23)
-
 options(scipen=999) 
 exp(coef(WDSpring23))
 
@@ -256,7 +250,6 @@ WDFall23 <- glm(Fall2023withdrew.dummy~
                 family = "binomial")
 
 summary(WDFall23)
-
 options(scipen=999) 
 exp(coef(WDFall23))
 
@@ -276,7 +269,6 @@ WDSpring24 <- glm(Spring2024withdrew.dummy~
                   family = "binomial")
 
 summary(WDSpring24)
-
 options(scipen=999) 
 exp(coef(WDSpring24))
 
@@ -285,8 +277,7 @@ raw_withdrawals_r <- merge_r %>%
   group_by(treatment) %>%
   summarise_at(vars(Spring2024withdrew.dummy), list(name = sum))
 
-#graduation odds ratio models
-#models with new data
+#graduation logistic regressions
 GradFall22 <- glm(fall22_grad~
                     treatment+
                     Sex+
@@ -302,13 +293,10 @@ GradFall22 <- glm(fall22_grad~
                   family = "binomial")
 
 summary(GradFall22)
-
 options(scipen=999) 
 exp(coef(GradFall22))
 
 #Spring 2024 graduation
-str(merge_r$sp23_grad)
-merge_r$sp23_grad <- as.numeric(merge_r$sp23_grad)
 GradSpring23 <- glm(sp23_grad~
                       treatment+
                       Sex+
@@ -324,9 +312,9 @@ GradSpring23 <- glm(sp23_grad~
                     family = "binomial")
 
 summary(GradSpring23)
-
 options(scipen=999) 
 exp(coef(GradSpring23))
+
 #Fall 2023 graduation
 GradFall23 <- glm(Fall2023Graduation.dummy~
                     treatment+
@@ -343,7 +331,6 @@ GradFall23 <- glm(Fall2023Graduation.dummy~
                   family = "binomial")
 
 summary(GradFall23)
-
 options(scipen=999) 
 exp(coef(GradFall23))
 
@@ -363,7 +350,6 @@ GradSpring24 <- glm(Spring2024Graduation.dummy~
                     family = "binomial")
 
 summary(GradSpring24)
-
 options(scipen=999) 
 exp(coef(GradSpring24))
 
